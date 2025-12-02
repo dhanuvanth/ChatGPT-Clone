@@ -210,7 +210,7 @@ function App() {
   // --- Render ---
 
   return (
-    <div className="flex h-screen bg-slate-900 text-slate-100 overflow-hidden font-sans">
+    <div className="flex h-screen bg-zinc-950 text-zinc-100 overflow-hidden font-sans">
       
       {/* Sidebar */}
       <Sidebar 
@@ -227,11 +227,11 @@ function App() {
       <div className="flex-1 flex flex-col relative h-full">
         
         {/* Top Header */}
-        <header className="flex items-center justify-between p-4 border-b border-slate-800 bg-slate-900/95 backdrop-blur z-10 text-slate-200">
+        <header className="flex items-center justify-between p-4 border-b border-zinc-800 bg-zinc-950/95 backdrop-blur z-10 text-zinc-200">
           <div className="flex items-center gap-3">
             <button 
               onClick={() => setIsSidebarOpen(true)}
-              className="p-2 -ml-2 rounded-md hover:bg-slate-800 md:hidden text-slate-400"
+              className="p-2 -ml-2 rounded-md hover:bg-zinc-800 md:hidden text-zinc-400"
             >
               <Menu size={20} />
             </button>
@@ -239,23 +239,23 @@ function App() {
               <h1 className="font-semibold text-sm md:text-base flex items-center gap-2">
                 {currentSession?.title || 'New Chat'}
               </h1>
-              <div className="flex items-center gap-2 text-xs text-slate-500">
-                 <span className={`w-2 h-2 rounded-full ${currentModel === ModelType.PRO ? 'bg-purple-500' : 'bg-green-500'}`}></span>
+              <div className="flex items-center gap-2 text-xs text-zinc-500">
+                 <span className={`w-2 h-2 rounded-full ${currentModel === ModelType.PRO ? 'bg-amber-500' : 'bg-emerald-500'}`}></span>
                  {currentModel === ModelType.PRO ? 'Gemini 3 Pro (Thinking)' : 'Gemini 2.5 Flash'}
               </div>
             </div>
           </div>
           
-          <div className="flex items-center gap-2 bg-slate-800 p-1 rounded-lg">
+          <div className="flex items-center gap-2 bg-zinc-800 p-1 rounded-lg">
              <button 
                onClick={() => setCurrentModel(ModelType.FLASH)}
-               className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${currentModel === ModelType.FLASH ? 'bg-slate-700 text-white shadow' : 'text-slate-400 hover:text-slate-200'}`}
+               className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${currentModel === ModelType.FLASH ? 'bg-zinc-700 text-white shadow' : 'text-zinc-400 hover:text-zinc-200'}`}
              >
                Flash
              </button>
              <button 
                onClick={() => setCurrentModel(ModelType.PRO)}
-               className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${currentModel === ModelType.PRO ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'}`}
+               className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${currentModel === ModelType.PRO ? 'bg-amber-600 text-white shadow' : 'text-zinc-400 hover:text-zinc-200'}`}
              >
                Pro
              </button>
@@ -263,16 +263,16 @@ function App() {
         </header>
 
         {/* RAG Context Panel (Collapsible) */}
-        <div className={`border-b border-slate-800 bg-slate-900/50 transition-all duration-300 ${isContextPanelOpen ? 'max-h-64' : 'max-h-0'} overflow-hidden`}>
-           <div className="p-4 bg-slate-800/30">
+        <div className={`border-b border-zinc-800 bg-zinc-900/50 transition-all duration-300 ${isContextPanelOpen ? 'max-h-64' : 'max-h-0'} overflow-hidden`}>
+           <div className="p-4 bg-zinc-900/30">
               <div className="flex justify-between items-center mb-3">
-                 <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-2">
-                    <BrainCircuit size={14} className="text-indigo-400" />
+                 <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400 flex items-center gap-2">
+                    <BrainCircuit size={14} className="text-emerald-400" />
                     Knowledge Context (RAG)
                  </h3>
                  <button 
                    onClick={() => fileInputRef.current?.click()} // Reusing ref, actually should split logic but keeping simple
-                   className="text-xs flex items-center gap-1 text-indigo-400 hover:text-indigo-300"
+                   className="text-xs flex items-center gap-1 text-emerald-400 hover:text-emerald-300"
                  >
                    <Paperclip size={12} /> Add Document
                  </button>
@@ -288,28 +288,28 @@ function App() {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                  <button 
                    onClick={() => contextInputRef.current?.click()}
-                   className="h-20 border border-dashed border-slate-700 rounded-lg flex flex-col items-center justify-center text-slate-500 hover:bg-slate-800 hover:border-slate-600 transition-colors"
+                   className="h-20 border border-dashed border-zinc-700 rounded-lg flex flex-col items-center justify-center text-zinc-500 hover:bg-zinc-800 hover:border-zinc-600 transition-colors"
                  >
                     <PlusIcon size={20} />
                     <span className="text-xs mt-1">Upload File</span>
                  </button>
 
                  {contextFiles.map((file, idx) => (
-                    <div key={idx} className="h-20 bg-slate-800 rounded-lg p-3 relative group border border-slate-700">
+                    <div key={idx} className="h-20 bg-zinc-800 rounded-lg p-3 relative group border border-zinc-700">
                        <button 
                          onClick={() => setContextFiles(prev => prev.filter((_, i) => i !== idx))}
-                         className="absolute top-1 right-1 p-1 bg-slate-900/80 rounded-full opacity-0 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-red-400"
+                         className="absolute top-1 right-1 p-1 bg-zinc-900/80 rounded-full opacity-0 group-hover:opacity-100 transition-opacity text-zinc-400 hover:text-red-400"
                        >
                          <X size={10} />
                        </button>
                        <div className="h-full flex flex-col justify-center items-center text-center">
-                          <FileIcon size={18} className="text-indigo-400 mb-1" />
-                          <span className="text-xs text-slate-300 line-clamp-2 break-all">{file.name}</span>
+                          <FileIcon size={18} className="text-emerald-400 mb-1" />
+                          <span className="text-xs text-zinc-300 line-clamp-2 break-all">{file.name}</span>
                        </div>
                     </div>
                  ))}
               </div>
-              <p className="text-[10px] text-slate-500 mt-2">
+              <p className="text-[10px] text-zinc-500 mt-2">
                  Files uploaded here are sent as system context for the entire chat session (simulating RAG).
               </p>
            </div>
@@ -318,22 +318,22 @@ function App() {
         {/* Chat Area */}
         <div className="flex-1 overflow-y-auto scroll-smooth">
           {messages.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center p-8 text-center text-slate-500">
-               <div className="w-16 h-16 bg-slate-800 rounded-2xl flex items-center justify-center mb-6 shadow-xl shadow-black/20">
-                  <Sparkles size={32} className="text-indigo-400" />
+            <div className="h-full flex flex-col items-center justify-center p-8 text-center text-zinc-500">
+               <div className="w-16 h-16 bg-zinc-900 rounded-2xl flex items-center justify-center mb-6 shadow-xl shadow-black/20 border border-zinc-800">
+                  <Sparkles size={32} className="text-emerald-500" />
                </div>
-               <h2 className="text-xl font-semibold text-slate-200 mb-2">How can I help you today?</h2>
-               <p className="max-w-md text-sm mb-8">
+               <h2 className="text-xl font-semibold text-zinc-200 mb-2">How can I help you today?</h2>
+               <p className="max-w-md text-sm mb-8 text-zinc-400">
                  I can explain complex code, draft emails, or analyze your uploaded documents using my large context window.
                </p>
                
                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 w-full max-w-2xl">
                   <button 
                     onClick={() => { setInput("Analyze this financial report for me."); setIsContextPanelOpen(true); }}
-                    className="p-4 border border-slate-700 rounded-xl hover:bg-slate-800 text-left transition-colors text-sm"
+                    className="p-4 border border-zinc-800 rounded-xl hover:bg-zinc-900 text-left transition-colors text-sm"
                   >
-                    <div className="font-medium text-slate-300 mb-1">Analyze Documents</div>
-                    <div className="text-slate-500 text-xs">Upload a PDF or text file to start context-aware chat</div>
+                    <div className="font-medium text-zinc-300 mb-1">Analyze Documents</div>
+                    <div className="text-zinc-500 text-xs">Upload a PDF or text file to start context-aware chat</div>
                   </button>
                   <button 
                      onClick={() => {
@@ -341,10 +341,10 @@ function App() {
                         // Hacky way to focus, better to use effect but this works for demo
                         setTimeout(() => handleSendMessage(), 100);
                      }}
-                     className="p-4 border border-slate-700 rounded-xl hover:bg-slate-800 text-left transition-colors text-sm"
+                     className="p-4 border border-zinc-800 rounded-xl hover:bg-zinc-900 text-left transition-colors text-sm"
                   >
-                    <div className="font-medium text-slate-300 mb-1">Generate Code</div>
-                    <div className="text-slate-500 text-xs">Create a React component or Python script</div>
+                    <div className="font-medium text-zinc-300 mb-1">Generate Code</div>
+                    <div className="text-zinc-500 text-xs">Create a React component or Python script</div>
                   </button>
                </div>
             </div>
@@ -352,8 +352,8 @@ function App() {
             <div className="flex flex-col pb-4">
                {/* Context Indicator if files exist */}
                {contextFiles.length > 0 && (
-                 <div className="w-full bg-slate-800/30 border-b border-slate-800/50 py-2 px-4 text-center">
-                    <span className="text-xs text-slate-500 flex items-center justify-center gap-2">
+                 <div className="w-full bg-zinc-900/30 border-b border-zinc-800/50 py-2 px-4 text-center">
+                    <span className="text-xs text-zinc-500 flex items-center justify-center gap-2">
                        <BrainCircuit size={12} /> Using {contextFiles.length} document(s) as context
                     </span>
                  </div>
@@ -363,7 +363,7 @@ function App() {
                ))}
                {isGenerating && messages[messages.length - 1]?.role !== Role.MODEL && (
                  <div className="flex justify-center p-4">
-                   <Loader2 size={24} className="animate-spin text-indigo-500" />
+                   <Loader2 size={24} className="animate-spin text-emerald-500" />
                  </div>
                )}
                <div ref={messagesEndRef} className="h-4" />
@@ -378,12 +378,12 @@ function App() {
              {pendingAttachments.length > 0 && (
                 <div className="flex gap-2 mb-2 overflow-x-auto pb-1">
                    {pendingAttachments.map((att, idx) => (
-                      <div key={idx} className="relative bg-slate-800 pl-3 pr-8 py-2 rounded-lg border border-slate-700 flex items-center group">
-                         <FileIcon size={14} className="text-indigo-400 mr-2" />
+                      <div key={idx} className="relative bg-zinc-800 pl-3 pr-8 py-2 rounded-lg border border-zinc-700 flex items-center group">
+                         <FileIcon size={14} className="text-emerald-400 mr-2" />
                          <span className="text-xs font-medium max-w-[150px] truncate">{att.name}</span>
                          <button 
                            onClick={() => setPendingAttachments(prev => prev.filter((_, i) => i !== idx))}
-                           className="absolute right-1 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-red-400"
+                           className="absolute right-1 top-1/2 -translate-y-1/2 p-1 text-zinc-400 hover:text-red-400"
                          >
                            <X size={14} />
                          </button>
@@ -392,16 +392,16 @@ function App() {
                 </div>
              )}
 
-            <div className="relative flex items-end gap-2 bg-slate-800 p-3 rounded-xl shadow-lg border border-slate-700 focus-within:ring-2 ring-indigo-500/50 transition-shadow">
+            <div className="relative flex items-end gap-2 bg-zinc-900 p-3 rounded-xl shadow-lg border border-zinc-800 focus-within:ring-2 ring-emerald-500/30 transition-shadow">
                <button 
                  onClick={() => setIsContextPanelOpen(!isContextPanelOpen)}
-                 className={`p-2 rounded-lg transition-colors mb-0.5 ${isContextPanelOpen || contextFiles.length > 0 ? 'bg-indigo-500/20 text-indigo-300' : 'text-slate-400 hover:bg-slate-700 hover:text-slate-200'}`}
+                 className={`p-2 rounded-lg transition-colors mb-0.5 ${isContextPanelOpen || contextFiles.length > 0 ? 'bg-emerald-500/20 text-emerald-300' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}`}
                  title="Manage Context / RAG"
                >
                  <BrainCircuit size={20} />
                </button>
                
-               <div className="h-6 w-[1px] bg-slate-700 mx-1 mb-2"></div>
+               <div className="h-6 w-[1px] bg-zinc-800 mx-1 mb-2"></div>
 
               <input 
                 type="file" 
@@ -413,7 +413,7 @@ function App() {
               
               <button 
                 onClick={() => fileInputRef.current?.click()}
-                className="p-2 text-slate-400 hover:bg-slate-700 hover:text-slate-200 rounded-lg transition-colors mb-0.5"
+                className="p-2 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 rounded-lg transition-colors mb-0.5"
                 title="Attach file to this message"
               >
                 <Paperclip size={20} />
@@ -425,7 +425,7 @@ function App() {
                 onKeyDown={handleKeyDown}
                 placeholder={contextFiles.length > 0 ? "Ask a question about the uploaded documents..." : "Message Gemini..."}
                 rows={1}
-                className="flex-1 max-h-48 min-h-[24px] bg-transparent border-0 focus:ring-0 text-slate-100 placeholder-slate-500 resize-none py-2 text-sm leading-relaxed"
+                className="flex-1 max-h-48 min-h-[24px] bg-transparent border-0 focus:ring-0 text-zinc-100 placeholder-zinc-500 resize-none py-2 text-sm leading-relaxed"
                 style={{ height: 'auto', minHeight: '44px' }}
                 onInput={(e) => {
                   const target = e.target as HTMLTextAreaElement;
@@ -439,15 +439,15 @@ function App() {
                 disabled={(!input.trim() && pendingAttachments.length === 0) || isGenerating}
                 className={`p-2 rounded-lg mb-0.5 transition-all duration-200 ${
                   (input.trim() || pendingAttachments.length > 0) && !isGenerating
-                    ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-md shadow-indigo-500/20' 
-                    : 'bg-slate-700 text-slate-500 cursor-not-allowed'
+                    ? 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-md shadow-emerald-500/20' 
+                    : 'bg-zinc-800 text-zinc-600 cursor-not-allowed'
                 }`}
               >
                 {isGenerating ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
               </button>
             </div>
             <div className="text-center mt-2">
-               <span className="text-[10px] text-slate-500">
+               <span className="text-[10px] text-zinc-600">
                   Gemini can make mistakes. Consider checking important information.
                </span>
             </div>
