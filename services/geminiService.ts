@@ -2,10 +2,14 @@ import { GoogleGenAI, Content, Part } from "@google/genai";
 import { Message, Role, ModelType, Attachment } from "../types";
 
 const createClient = () => {
-  if (!process.env.API_KEY) {
-    console.error("API_KEY is missing from environment variables");
+  // Check for custom key in local storage first
+  const customKey = localStorage.getItem('gemini_api_key');
+  const apiKey = customKey || process.env.API_KEY;
+
+  if (!apiKey) {
+    console.error("API_KEY is missing from environment variables and local storage");
   }
-  return new GoogleGenAI({ apiKey: process.env.API_KEY });
+  return new GoogleGenAI({ apiKey });
 };
 
 export const streamChatResponse = async (
