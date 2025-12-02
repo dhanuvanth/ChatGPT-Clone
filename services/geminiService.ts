@@ -7,7 +7,7 @@ const createClient = () => {
   const apiKey = customKey || process.env.API_KEY;
 
   if (!apiKey) {
-    console.error("API_KEY is missing from environment variables and local storage");
+    throw new Error("API Key is missing. Please add it in settings or provide it via environment variables.");
   }
   return new GoogleGenAI({ apiKey });
 };

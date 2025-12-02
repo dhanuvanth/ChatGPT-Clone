@@ -34,10 +34,9 @@ function App() {
     const loaded = loadChatsFromStorage();
     if (loaded.length > 0) {
       setSessions(loaded);
-      // Don't auto-select a session to keep main screen clean, or select most recent:
-      // setCurrentSessionId(loaded[0].id); 
+      // We don't auto-select a session to simulate the "New Chat" start screen
     } else {
-      createNewSession();
+      // If no sessions exist, we can't create one in render, but the user is already on "New Chat" screen visually
     }
   }, []);
 
@@ -63,16 +62,9 @@ function App() {
   const messages = currentSession?.messages || [];
 
   const createNewSession = () => {
-    const newSession: ChatSession = {
-      id: generateId(),
-      title: 'New Chat',
-      messages: [],
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    };
-    setSessions(prev => [newSession, ...prev]);
-    setCurrentSessionId(newSession.id);
-    setContextFiles([]); // Reset context for new chat
+    // Just reset the selection to null to show the "New Chat" screen
+    setCurrentSessionId(null);
+    setContextFiles([]);
     if (window.innerWidth < 768) setIsSidebarOpen(false);
   };
 
@@ -99,11 +91,7 @@ function App() {
     setSessions(newSessions);
     saveChatsToStorage(newSessions);
     if (currentSessionId === id) {
-      if (newSessions.length > 0) {
-        setCurrentSessionId(newSessions[0].id);
-      } else {
-        createNewSession();
-      }
+       setCurrentSessionId(null);
     }
   };
 
@@ -141,8 +129,33 @@ function App() {
   };
 
   const handleSendMessage = async () => {
-    if ((!input.trim() && pendingAttachments.length === 0) || isGenerating || !currentSessionId) return;
+    // 1. Validation
+    if ((!input.trim() && pendingAttachments.length === 0) || isGenerating) return;
 
+    // 2. Identify or Create Session
+    let activeSessionId = currentSessionId;
+    let currentHistory = messages;
+
+    // If we are on the "New Chat" screen (null ID), create the session now
+    if (!activeSessionId) {
+      const newSessionId = generateId();
+      const newSession: ChatSession = {
+        id: newSessionId,
+        title: 'New Chat',
+        messages: [],
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      
+      // We must add the new session to state immediately so the subsequent updates work
+      setSessions(prev => [newSession, ...prev]);
+      setCurrentSessionId(newSessionId);
+      
+      activeSessionId = newSessionId;
+      currentHistory = [];
+    }
+
+    // 3. Prepare User Message
     const userMessage: Message = {
       id: generateId(),
       role: Role.USER,
@@ -151,16 +164,17 @@ function App() {
       attachments: [...pendingAttachments]
     };
 
-    // Optimistically add user message
-    const updatedMessages = [...messages, userMessage];
-    updateSessionMessages(currentSessionId, updatedMessages);
+    // Optimistically update UI
+    const updatedMessages = [...currentHistory, userMessage];
+    updateSessionMessages(activeSessionId, updatedMessages);
     
+    // Clear inputs
     setInput('');
     setPendingAttachments([]);
     setIsGenerating(true);
 
     try {
-      // Create placeholder for bot message
+      // 4. Create Bot Placeholder
       const botMessageId = generateId();
       let botMessageText = '';
       
@@ -171,30 +185,30 @@ function App() {
         timestamp: Date.now()
       };
       
-      // Update state to show loading bot bubble
-      updateSessionMessages(currentSessionId, [...updatedMessages, botMessage]);
+      updateSessionMessages(activeSessionId, [...updatedMessages, botMessage]);
 
-      // Stream response
+      // 5. Stream Response
       await streamChatResponse(
         updatedMessages, 
         currentModel, 
         (chunk) => {
           botMessageText = chunk;
-          updateSessionMessages(currentSessionId, [...updatedMessages, { ...botMessage, text: botMessageText }]);
+          // We must update the specific session
+          updateSessionMessages(activeSessionId!, [...updatedMessages, { ...botMessage, text: botMessageText }]);
         },
         contextFiles
       );
 
-    } catch (error) {
+    } catch (error: any) {
       console.error("Chat error", error);
       const errorMessage: Message = {
         id: generateId(),
         role: Role.MODEL,
-        text: "Sorry, I encountered an error processing your request. Please try again.",
+        text: error.message || "Sorry, I encountered an error. Please check your API key and connection.",
         timestamp: Date.now(),
         isError: true
       };
-      updateSessionMessages(currentSessionId, [...updatedMessages, errorMessage]);
+      updateSessionMessages(activeSessionId, [...updatedMessages, errorMessage]);
     } finally {
       setIsGenerating(false);
     }
@@ -339,7 +353,12 @@ function App() {
                      onClick={() => {
                         setInput("Write a React component for a responsive navbar.");
                         // Hacky way to focus, better to use effect but this works for demo
-                        setTimeout(() => handleSendMessage(), 100);
+                        setTimeout(() => {
+                           const btn = document.querySelector('button[aria-label="Send Message"]') as HTMLButtonElement;
+                           if (btn) btn.click();
+                           // Fallback call
+                           if (input) handleSendMessage(); 
+                        }, 500);
                      }}
                      className="p-4 border border-zinc-800 rounded-xl hover:bg-zinc-900 text-left transition-colors text-sm"
                   >
@@ -435,6 +454,7 @@ function App() {
               />
 
               <button
+                aria-label="Send Message"
                 onClick={handleSendMessage}
                 disabled={(!input.trim() && pendingAttachments.length === 0) || isGenerating}
                 className={`p-2 rounded-lg mb-0.5 transition-all duration-200 ${
