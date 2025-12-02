@@ -1,0 +1,5 @@
+{
+  "name": "Gemini RAG Chat",
+  "description": "A ChatGPT-style interface with RAG capabilities. Upload documents (PDF, TXT, Images) to chat with your data using Gemini's long-context window.",
+  "requestFramePermissions": []
+}
