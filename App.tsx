@@ -1,10 +1,12 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { Menu, Send, Paperclip, X, File as FileIcon, Loader2, Sparkles, BrainCircuit } from 'lucide-react';
 import Sidebar from './components/Sidebar';
 import MessageBubble from './components/MessageBubble';
 import { streamChatResponse } from './services/geminiService';
-import { Message, Role, ChatSession, ModelType, Attachment, KnowledgeContext } from './types';
+import { Message, Role, ChatSession, ModelType, Attachment, KnowledgeContext, MCPServer } from './types';
 import { generateId, fileToBase64, saveChatsToStorage, loadChatsFromStorage } from './utils';
+import { connectToServer } from './services/mcpService';
 
 function App() {
   // --- State ---
@@ -22,6 +24,9 @@ function App() {
   const [contextFiles, setContextFiles] = useState<Attachment[]>([]);
   const [isContextPanelOpen, setIsContextPanelOpen] = useState(false);
 
+  // MCP Servers
+  const [mcpServers, setMcpServers] = useState<MCPServer[]>([]);
+
   // Refs
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -34,9 +39,19 @@ function App() {
     const loaded = loadChatsFromStorage();
     if (loaded.length > 0) {
       setSessions(loaded);
-      // We don't auto-select a session to simulate the "New Chat" start screen
-    } else {
-      // If no sessions exist, we can't create one in render, but the user is already on "New Chat" screen visually
+    }
+    
+    // Load MCP Servers
+    const storedServers = localStorage.getItem('mcp_servers');
+    if (storedServers) {
+      try {
+        const parsed = JSON.parse(storedServers);
+        setMcpServers(parsed);
+        // Optimistically refresh connection for all servers on load
+        parsed.forEach((s: MCPServer) => handleRefreshServer(s.id));
+      } catch (e) {
+        console.error("Failed to load MCP servers", e);
+      }
     }
   }, []);
 
@@ -46,6 +61,11 @@ function App() {
       saveChatsToStorage(sessions);
     }
   }, [sessions]);
+
+  // Save MCP servers
+  useEffect(() => {
+    localStorage.setItem('mcp_servers', JSON.stringify(mcpServers));
+  }, [mcpServers]);
 
   // Scroll to bottom on new messages
   const scrollToBottom = () => {
@@ -62,7 +82,6 @@ function App() {
   const messages = currentSession?.messages || [];
 
   const createNewSession = () => {
-    // Just reset the selection to null to show the "New Chat" screen
     setCurrentSessionId(null);
     setContextFiles([]);
     if (window.innerWidth < 768) setIsSidebarOpen(false);
@@ -71,7 +90,6 @@ function App() {
   const updateSessionMessages = (sessionId: string, newMessages: Message[]) => {
     setSessions(prev => prev.map(s => {
       if (s.id === sessionId) {
-        // Auto-generate title if it's the first user message
         let title = s.title;
         if (s.messages.length === 0 && newMessages.length > 0) {
           const firstMsg = newMessages[0];
@@ -102,7 +120,6 @@ function App() {
 
       for (const file of filesArray) {
         try {
-          // Basic validation (limit 5MB approx)
           if (file.size > 5 * 1024 * 1024) {
             alert(`File ${file.name} is too large (max 5MB)`);
             continue;
@@ -124,19 +141,59 @@ function App() {
         setPendingAttachments(prev => [...prev, ...newAttachments]);
       }
     }
-    // Reset input
     if (e.target) e.target.value = '';
   };
 
+  // MCP Handlers
+  const handleAddServer = async (url: string) => {
+    const tempId = generateId();
+    // Add placeholder
+    setMcpServers(prev => [...prev, {
+      id: tempId,
+      url,
+      name: url,
+      status: 'disconnected',
+      tools: []
+    }]);
+
+    try {
+      const tools = await connectToServer(url);
+      setMcpServers(prev => prev.map(s => 
+        s.id === tempId ? { ...s, status: 'connected', tools, name: new URL(url).hostname } : s
+      ));
+    } catch (e) {
+      setMcpServers(prev => prev.map(s => 
+        s.id === tempId ? { ...s, status: 'error' } : s
+      ));
+    }
+  };
+
+  const handleRemoveServer = (id: string) => {
+    setMcpServers(prev => prev.filter(s => s.id !== id));
+  };
+
+  const handleRefreshServer = async (id: string) => {
+    const server = mcpServers.find(s => s.id === id);
+    if (!server) return;
+
+    try {
+      const tools = await connectToServer(server.url);
+      setMcpServers(prev => prev.map(s => 
+        s.id === id ? { ...s, status: 'connected', tools } : s
+      ));
+    } catch (e) {
+      setMcpServers(prev => prev.map(s => 
+        s.id === id ? { ...s, status: 'error' } : s
+      ));
+    }
+  };
+
   const handleSendMessage = async () => {
-    // 1. Validation
     if ((!input.trim() && pendingAttachments.length === 0) || isGenerating) return;
 
-    // 2. Identify or Create Session
     let activeSessionId = currentSessionId;
     let currentHistory = messages;
 
-    // If we are on the "New Chat" screen (null ID), create the session now
     if (!activeSessionId) {
       const newSessionId = generateId();
       const newSession: ChatSession = {
@@ -146,16 +203,12 @@ function App() {
         createdAt: Date.now(),
         updatedAt: Date.now(),
       };
-      
-      // We must add the new session to state immediately so the subsequent updates work
       setSessions(prev => [newSession, ...prev]);
       setCurrentSessionId(newSessionId);
-      
       activeSessionId = newSessionId;
       currentHistory = [];
     }
 
-    // 3. Prepare User Message
     const userMessage: Message = {
       id: generateId(),
       role: Role.USER,
@@ -164,39 +217,35 @@ function App() {
       attachments: [...pendingAttachments]
     };
 
-    // Optimistically update UI
     const updatedMessages = [...currentHistory, userMessage];
     updateSessionMessages(activeSessionId, updatedMessages);
     
-    // Clear inputs
     setInput('');
     setPendingAttachments([]);
     setIsGenerating(true);
 
     try {
-      // 4. Create Bot Placeholder
       const botMessageId = generateId();
       let botMessageText = '';
       
       const botMessage: Message = {
         id: botMessageId,
         role: Role.MODEL,
-        text: '', // Start empty
+        text: '', 
         timestamp: Date.now()
       };
       
       updateSessionMessages(activeSessionId, [...updatedMessages, botMessage]);
 
-      // 5. Stream Response
       await streamChatResponse(
         updatedMessages, 
         currentModel, 
         (chunk) => {
           botMessageText = chunk;
-          // We must update the specific session
           updateSessionMessages(activeSessionId!, [...updatedMessages, { ...botMessage, text: botMessageText }]);
         },
-        contextFiles
+        contextFiles,
+        mcpServers // Pass connected servers
       );
 
     } catch (error: any) {
@@ -221,12 +270,9 @@ function App() {
     }
   };
 
-  // --- Render ---
-
   return (
     <div className="flex h-screen bg-zinc-950 text-zinc-100 overflow-hidden font-sans">
       
-      {/* Sidebar */}
       <Sidebar 
         isOpen={isSidebarOpen} 
         onClose={() => setIsSidebarOpen(false)}
@@ -235,12 +281,15 @@ function App() {
         onSelectSession={setCurrentSessionId}
         onNewChat={createNewSession}
         onDeleteSession={handleDeleteSession}
+        // MCP Props
+        mcpServers={mcpServers}
+        onAddServer={handleAddServer}
+        onRemoveServer={handleRemoveServer}
+        onRefreshServer={handleRefreshServer}
       />
 
-      {/* Main Content */}
       <div className="flex-1 flex flex-col relative h-full">
         
-        {/* Top Header */}
         <header className="flex items-center justify-between p-4 border-b border-zinc-800 bg-zinc-950/95 backdrop-blur z-10 text-zinc-200">
           <div className="flex items-center gap-3">
             <button 
@@ -276,7 +325,6 @@ function App() {
           </div>
         </header>
 
-        {/* RAG Context Panel (Collapsible) */}
         <div className={`border-b border-zinc-800 bg-zinc-900/50 transition-all duration-300 ${isContextPanelOpen ? 'max-h-64' : 'max-h-0'} overflow-hidden`}>
            <div className="p-4 bg-zinc-900/30">
               <div className="flex justify-between items-center mb-3">
@@ -285,7 +333,7 @@ function App() {
                     Knowledge Context (RAG)
                  </h3>
                  <button 
-                   onClick={() => fileInputRef.current?.click()} // Reusing ref, actually should split logic but keeping simple
+                   onClick={() => fileInputRef.current?.click()}
                    className="text-xs flex items-center gap-1 text-emerald-400 hover:text-emerald-300"
                  >
                    <Paperclip size={12} /> Add Document
@@ -295,206 +343,169 @@ function App() {
                    multiple 
                    className="hidden" 
                    ref={contextInputRef} 
-                   onChange={(e) => handleFileUpload(e, true)} 
+                   onChange={(e) => handleFileUpload(e, true)}
                  />
               </div>
               
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                 <button 
-                   onClick={() => contextInputRef.current?.click()}
-                   className="h-20 border border-dashed border-zinc-700 rounded-lg flex flex-col items-center justify-center text-zinc-500 hover:bg-zinc-800 hover:border-zinc-600 transition-colors"
-                 >
-                    <PlusIcon size={20} />
-                    <span className="text-xs mt-1">Upload File</span>
-                 </button>
-
-                 {contextFiles.map((file, idx) => (
-                    <div key={idx} className="h-20 bg-zinc-800 rounded-lg p-3 relative group border border-zinc-700">
-                       <button 
-                         onClick={() => setContextFiles(prev => prev.filter((_, i) => i !== idx))}
-                         className="absolute top-1 right-1 p-1 bg-zinc-900/80 rounded-full opacity-0 group-hover:opacity-100 transition-opacity text-zinc-400 hover:text-red-400"
-                       >
-                         <X size={10} />
-                       </button>
-                       <div className="h-full flex flex-col justify-center items-center text-center">
-                          <FileIcon size={18} className="text-emerald-400 mb-1" />
-                          <span className="text-xs text-zinc-300 line-clamp-2 break-all">{file.name}</span>
-                       </div>
-                    </div>
-                 ))}
-              </div>
-              <p className="text-[10px] text-zinc-500 mt-2">
-                 Files uploaded here are sent as system context for the entire chat session (simulating RAG).
-              </p>
+              {/* Context Files List */}
+              {contextFiles.length === 0 ? (
+                <div className="text-center py-8 border-2 border-dashed border-zinc-800 rounded-lg text-zinc-600 text-sm">
+                   Drag & drop files here or click "Add Document" to upload knowledge base.
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                   {contextFiles.map((file, idx) => (
+                      <div key={idx} className="bg-zinc-800 rounded p-2 flex items-center gap-2 overflow-hidden relative group">
+                         <FileIcon size={16} className="text-emerald-500 shrink-0" />
+                         <span className="text-xs text-zinc-300 truncate">{file.name}</span>
+                         <button 
+                           onClick={() => setContextFiles(prev => prev.filter((_, i) => i !== idx))}
+                           className="absolute right-1 top-1/2 -translate-y-1/2 p-1 bg-zinc-900/80 rounded-full text-zinc-400 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                         >
+                            <X size={12} />
+                         </button>
+                      </div>
+                   ))}
+                </div>
+              )}
            </div>
         </div>
 
         {/* Chat Area */}
         <div className="flex-1 overflow-y-auto scroll-smooth">
-          {messages.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center p-8 text-center text-zinc-500">
-               <div className="w-16 h-16 bg-zinc-900 rounded-2xl flex items-center justify-center mb-6 shadow-xl shadow-black/20 border border-zinc-800">
-                  <Sparkles size={32} className="text-emerald-500" />
-               </div>
-               <h2 className="text-xl font-semibold text-zinc-200 mb-2">How can I help you today?</h2>
-               <p className="max-w-md text-sm mb-8 text-zinc-400">
-                 I can explain complex code, draft emails, or analyze your uploaded documents using my large context window.
-               </p>
-               
-               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 w-full max-w-2xl">
-                  <button 
-                    onClick={() => { setInput("Analyze this financial report for me."); setIsContextPanelOpen(true); }}
-                    className="p-4 border border-zinc-800 rounded-xl hover:bg-zinc-900 text-left transition-colors text-sm"
-                  >
-                    <div className="font-medium text-zinc-300 mb-1">Analyze Documents</div>
-                    <div className="text-zinc-500 text-xs">Upload a PDF or text file to start context-aware chat</div>
-                  </button>
-                  <button 
-                     onClick={() => {
-                        setInput("Write a React component for a responsive navbar.");
-                        // Hacky way to focus, better to use effect but this works for demo
-                        setTimeout(() => {
-                           const btn = document.querySelector('button[aria-label="Send Message"]') as HTMLButtonElement;
-                           if (btn) btn.click();
-                           // Fallback call
-                           if (input) handleSendMessage(); 
-                        }, 500);
-                     }}
-                     className="p-4 border border-zinc-800 rounded-xl hover:bg-zinc-900 text-left transition-colors text-sm"
-                  >
-                    <div className="font-medium text-zinc-300 mb-1">Generate Code</div>
-                    <div className="text-zinc-500 text-xs">Create a React component or Python script</div>
-                  </button>
-               </div>
+          {!currentSessionId && messages.length === 0 ? (
+            <div className="h-full flex flex-col items-center justify-center p-8 text-center animate-in fade-in duration-500">
+              <div className="w-16 h-16 bg-gradient-to-tr from-emerald-500 to-teal-500 rounded-2xl flex items-center justify-center mb-6 shadow-2xl shadow-emerald-500/20">
+                <Sparkles size={32} className="text-white" />
+              </div>
+              <h2 className="text-2xl font-bold text-white mb-2">How can I help you today?</h2>
+              <p className="text-zinc-400 max-w-md mb-8">
+                I can explain complex code, draft emails, or analyze your uploaded documents using my large context window.
+              </p>
+              
+              <div className="grid md:grid-cols-2 gap-4 max-w-2xl w-full text-left">
+                <button 
+                  onClick={() => setIsContextPanelOpen(true)}
+                  className="p-4 border border-zinc-800 rounded-xl hover:bg-zinc-800/50 transition-colors group"
+                >
+                  <div className="font-medium text-zinc-200 mb-1 flex items-center gap-2">
+                    <BrainCircuit size={16} className="text-emerald-500" /> Analyze Documents
+                  </div>
+                  <div className="text-sm text-zinc-500 group-hover:text-zinc-400">
+                    Upload a PDF or text file to start context-aware chat
+                  </div>
+                </button>
+                <div className="p-4 border border-zinc-800 rounded-xl hover:bg-zinc-800/50 transition-colors group cursor-pointer" onClick={() => setInput("Create a React component for a sortable table")}>
+                  <div className="font-medium text-zinc-200 mb-1">Generate Code</div>
+                  <div className="text-sm text-zinc-500 group-hover:text-zinc-400">
+                    Create a React component or Python script
+                  </div>
+                </div>
+              </div>
             </div>
           ) : (
-            <div className="flex flex-col pb-4">
-               {/* Context Indicator if files exist */}
-               {contextFiles.length > 0 && (
-                 <div className="w-full bg-zinc-900/30 border-b border-zinc-800/50 py-2 px-4 text-center">
-                    <span className="text-xs text-zinc-500 flex items-center justify-center gap-2">
-                       <BrainCircuit size={12} /> Using {contextFiles.length} document(s) as context
-                    </span>
-                 </div>
-               )}
+            <div className="py-6">
                {messages.map((msg) => (
                  <MessageBubble key={msg.id} message={msg} />
                ))}
-               {isGenerating && messages[messages.length - 1]?.role !== Role.MODEL && (
-                 <div className="flex justify-center p-4">
-                   <Loader2 size={24} className="animate-spin text-emerald-500" />
+               {isGenerating && (
+                 <div className="max-w-3xl mx-auto px-4 py-4">
+                   <div className="flex items-center gap-2 text-zinc-500 text-sm">
+                     <Loader2 size={16} className="animate-spin" /> Thinking...
+                   </div>
                  </div>
                )}
-               <div ref={messagesEndRef} className="h-4" />
+               <div ref={messagesEndRef} />
             </div>
           )}
         </div>
 
         {/* Input Area */}
-        <div className="p-4 pt-0 bg-transparent">
+        <div className="p-4 border-t border-zinc-800 bg-zinc-950/95">
           <div className="max-w-3xl mx-auto">
+             
              {/* Pending Attachments */}
              {pendingAttachments.length > 0 && (
-                <div className="flex gap-2 mb-2 overflow-x-auto pb-1">
-                   {pendingAttachments.map((att, idx) => (
-                      <div key={idx} className="relative bg-zinc-800 pl-3 pr-8 py-2 rounded-lg border border-zinc-700 flex items-center group">
-                         <FileIcon size={14} className="text-emerald-400 mr-2" />
-                         <span className="text-xs font-medium max-w-[150px] truncate">{att.name}</span>
-                         <button 
-                           onClick={() => setPendingAttachments(prev => prev.filter((_, i) => i !== idx))}
-                           className="absolute right-1 top-1/2 -translate-y-1/2 p-1 text-zinc-400 hover:text-red-400"
-                         >
-                           <X size={14} />
-                         </button>
-                      </div>
-                   ))}
-                </div>
+               <div className="flex flex-wrap gap-2 mb-2">
+                 {pendingAttachments.map((att, idx) => (
+                   <div key={idx} className="relative group">
+                     <div className="flex items-center gap-2 bg-zinc-800 px-3 py-2 rounded-lg text-xs font-medium text-zinc-200 border border-zinc-700">
+                       <FileIcon size={14} className="text-zinc-400" />
+                       <span className="max-w-[150px] truncate">{att.name}</span>
+                     </div>
+                     <button 
+                       onClick={() => setPendingAttachments(prev => prev.filter((_, i) => i !== idx))}
+                       className="absolute -top-1 -right-1 bg-zinc-700 text-zinc-300 rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                     >
+                       <X size={12} />
+                     </button>
+                   </div>
+                 ))}
+               </div>
              )}
 
-            <div className="relative flex items-end gap-2 bg-zinc-900 p-3 rounded-xl shadow-lg border border-zinc-800 focus-within:ring-2 ring-emerald-500/30 transition-shadow">
-               <button 
-                 onClick={() => setIsContextPanelOpen(!isContextPanelOpen)}
-                 className={`p-2 rounded-lg transition-colors mb-0.5 ${isContextPanelOpen || contextFiles.length > 0 ? 'bg-emerald-500/20 text-emerald-300' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}`}
-                 title="Manage Context / RAG"
-               >
-                 <BrainCircuit size={20} />
-               </button>
-               
-               <div className="h-6 w-[1px] bg-zinc-800 mx-1 mb-2"></div>
-
-              <input 
-                type="file" 
-                multiple 
-                className="hidden" 
-                ref={fileInputRef} 
-                onChange={(e) => handleFileUpload(e, false)} 
-              />
+            <div className="relative bg-zinc-900 border border-zinc-800 rounded-2xl focus-within:ring-2 focus-within:ring-emerald-500/20 focus-within:border-emerald-500/50 transition-all shadow-lg shadow-black/20">
               
-              <button 
-                onClick={() => fileInputRef.current?.click()}
-                className="p-2 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 rounded-lg transition-colors mb-0.5"
-                title="Attach file to this message"
-              >
-                <Paperclip size={20} />
-              </button>
+              {/* Toolbar */}
+              <div className="absolute left-3 bottom-3 flex items-center gap-2">
+                 <button 
+                   onClick={() => setIsContextPanelOpen(!isContextPanelOpen)}
+                   className={`p-2 rounded-lg transition-colors ${isContextPanelOpen ? 'bg-emerald-500/10 text-emerald-400' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'}`}
+                   title="RAG Context"
+                 >
+                   <BrainCircuit size={20} />
+                 </button>
+                 <button 
+                   onClick={() => fileInputRef.current?.click()}
+                   className="p-2 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 rounded-lg transition-colors"
+                   title="Attach File"
+                 >
+                   <Paperclip size={20} />
+                 </button>
+                 {/* Hidden File Input for Message Attachments */}
+                 <input 
+                   type="file" 
+                   multiple 
+                   className="hidden" 
+                   ref={fileInputRef} 
+                   onChange={(e) => handleFileUpload(e, false)} 
+                 />
+              </div>
 
               <textarea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder={contextFiles.length > 0 ? "Ask a question about the uploaded documents..." : "Message Gemini..."}
+                placeholder={isContextPanelOpen ? "Ask about the uploaded documents..." : "Ask anything..."}
+                className="w-full bg-transparent border-none text-zinc-100 placeholder-zinc-500 px-4 py-4 pl-4 min-h-[56px] max-h-[200px] resize-none focus:ring-0 ml-24"
                 rows={1}
-                className="flex-1 max-h-48 min-h-[24px] bg-transparent border-0 focus:ring-0 text-zinc-100 placeholder-zinc-500 resize-none py-2 text-sm leading-relaxed"
-                style={{ height: 'auto', minHeight: '44px' }}
-                onInput={(e) => {
-                  const target = e.target as HTMLTextAreaElement;
-                  target.style.height = 'auto';
-                  target.style.height = `${Math.min(target.scrollHeight, 200)}px`;
-                }}
+                style={{ height: 'auto', minHeight: '56px' }}
               />
 
-              <button
-                aria-label="Send Message"
-                onClick={handleSendMessage}
-                disabled={(!input.trim() && pendingAttachments.length === 0) || isGenerating}
-                className={`p-2 rounded-lg mb-0.5 transition-all duration-200 ${
-                  (input.trim() || pendingAttachments.length > 0) && !isGenerating
-                    ? 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-md shadow-emerald-500/20' 
-                    : 'bg-zinc-800 text-zinc-600 cursor-not-allowed'
-                }`}
-              >
-                {isGenerating ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
-              </button>
+              <div className="absolute right-2 bottom-2">
+                <button
+                  onClick={handleSendMessage}
+                  disabled={!input.trim() && pendingAttachments.length === 0}
+                  className={`p-2 rounded-xl transition-all ${
+                    (input.trim() || pendingAttachments.length > 0) 
+                      ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-500/20 hover:bg-emerald-500' 
+                      : 'bg-zinc-800 text-zinc-600 cursor-not-allowed'
+                  }`}
+                >
+                  <Send size={18} />
+                </button>
+              </div>
             </div>
             <div className="text-center mt-2">
-               <span className="text-[10px] text-zinc-600">
-                  Gemini can make mistakes. Consider checking important information.
-               </span>
+              <p className="text-[10px] text-zinc-600">
+                Gemini can make mistakes. Consider checking important information.
+              </p>
             </div>
           </div>
         </div>
-
       </div>
     </div>
   );
 }
-
-// Simple internal component needed for the "Plus" icon in the context panel
-const PlusIcon = ({ size }: { size: number }) => (
-   <svg 
-      xmlns="http://www.w3.org/2000/svg" 
-      width={size} 
-      height={size} 
-      viewBox="0 0 24 24" 
-      fill="none" 
-      stroke="currentColor" 
-      strokeWidth="2" 
-      strokeLinecap="round" 
-      strokeLinejoin="round"
-   >
-      <path d="M5 12h14" />
-      <path d="M12 5v14" />
-   </svg>
-);
 
 export default App;
